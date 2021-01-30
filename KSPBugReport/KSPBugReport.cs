@@ -330,9 +330,24 @@ namespace KSPBugReport
                 yield return null; // make sure the debug screen is hidden when we take the screenshot
             }
 
+            yield return new WaitForEndOfFrame(); // necessary so everything is rendered as it should
+
             try
             {
-                byte[] shotPNG = ScreenCapture.CaptureScreenshotAsTexture(1).EncodeToPNG();
+                // Doesn't work as of KSP 1.11 / DX11 : ground texture are rendered as transparent for some reason
+                // byte[] shotPNG = ScreenCapture.CaptureScreenshotAsTexture(1).EncodeToPNG();
+
+                // Create a texture the size of the screen, RGB24 format
+                int width = Screen.width;
+                int height = Screen.height;
+                Texture2D tex = new Texture2D(width, height, TextureFormat.RGB24, false);
+
+                // Read screen contents into the texture
+                tex.ReadPixels(new Rect(0, 0, width, height), 0, 0);
+                tex.Apply();
+                byte[] shotPNG = tex.EncodeToPNG();
+
+                
                 string pngFileName = null;
 
                 using (ZipArchive archive = ZipFile.Open(lastReportPath, ZipArchiveMode.Update))
