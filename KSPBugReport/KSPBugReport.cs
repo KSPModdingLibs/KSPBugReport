@@ -45,6 +45,7 @@ namespace KSPBugReport
             {
                 UITreeView.Item parent = DebugScreen.AddContentItem(null, "bugreport", "Bug report", null, null);
                 DebugScreen.AddContentItem(parent, "createreport", "Create report", null, CreateReportFromDebugScreen);
+                DebugScreen.AddContentItem(parent, "addscreenshot", "Add screenshot to last report", null, AddScreenshotToLastReport);
                 DebugScreen.AddContentItem(parent, "uploadreport", "Upload last report", null, UploadLastReport);
                 DebugScreen.AddContentItem(parent, "copylinktoclipoard", "Copy last upload link to clipboard", null, CopyLastLinkToClipboard);
                 DebugScreen.AddContentItem(parent, "openreport", "Open last report", null, OpenReportFromDebugScreen);
@@ -58,7 +59,7 @@ namespace KSPBugReport
 
         private static string lastReportPath = string.Empty;
         private static string lastReportFolderPath = string.Empty;
-        private static string lastReportUploadURI = string.Empty;
+        public static string lastReportUploadURI = string.Empty;
 
         private static void CreateReportFromDebugScreen()
         {
@@ -112,68 +113,30 @@ namespace KSPBugReport
 
         private static IEnumerator Upload()
         {
-            // list of potential services here : https://gist.github.com/Prajjwal/2226c6a96d1d72abc713e889160a9f81
+            byte[] fileData = File.ReadAllBytes(lastReportPath);
+            string fileName = Path.GetFileName(lastReportPath);
 
-            WWWForm form = new WWWForm();
-            form.AddBinaryData("file", File.ReadAllBytes(lastReportPath), Path.GetFileName(lastReportPath));
+            UploadService primaryService = new UploadServiceOshi(fileData, fileName);
+            yield return HighLogic.fetch.StartCoroutine(primaryService.Send());
 
-            using (UnityWebRequest www = UnityWebRequest.Post("https://0x0.st", form))
+            if (primaryService.Success)
             {
-                yield return www.SendWebRequest();
-
-                try
-                {
-                    if (www.isNetworkError || www.isHttpError)
-                    {
-                        Lib.Log(www.error, Lib.LogLevel.Warning);
-                        throw new Exception();
-                    }
-                    else
-                    {
-                        lastReportUploadURI = www.downloadHandler.text;
-                        ScreenMessages.PostScreenMessage(
-                            $"Upload complete for <color=#FF8000>{Path.GetFileName(lastReportPath)}</color> to the 0x0.st sharing service (~1 year retention)",
-                            10f, ScreenMessageStyle.UPPER_CENTER, true);
-                        CopyLastLinkToClipboard();
-                        yield break;
-                    }
-                }
-                catch (Exception)
-                {
-                    ScreenMessages.PostScreenMessage($"Upload failed to 0x0.st", 3f, ScreenMessageStyle.UPPER_CENTER, Color.red);
-                }
+                yield break;
             }
 
-            using (UnityWebRequest www = UnityWebRequest.Post("https://file.io", form))
-            {
-                yield return www.SendWebRequest();
+            UploadService secondaryService = new UploadService0x0(fileData, fileName);
+            yield return HighLogic.fetch.StartCoroutine(secondaryService.Send());
 
-                try
-                {
-                    if (www.isNetworkError || www.isHttpError)
-                    {
-                        Lib.Log(www.error, Lib.LogLevel.Warning);
-                        throw new Exception();
-                    }
-                    else
-                    {
-                        FileUploadResponse_Fileio response = JsonUtility.FromJson<FileUploadResponse_Fileio>(www.downloadHandler.text);
-                        lastReportUploadURI = response.link;
-                        ScreenMessages.PostScreenMessage(
-                            $"Upload complete for <color=#FF8000>{Path.GetFileName(lastReportPath)}</color> to the file.io sharing service (file deleted after first download, 14 days retention)"
-                            , 10f, ScreenMessageStyle.UPPER_CENTER, true);
-                        CopyLastLinkToClipboard();
-                        yield break;
-                    }
-                }
-                catch (Exception)
-                {
-                    ScreenMessages.PostScreenMessage($"Upload failed to file.io", 3f, ScreenMessageStyle.UPPER_CENTER, Color.red);
-                }
+            if (secondaryService.Success)
+            {
+                yield break;
             }
+
+            UploadService tertiaryService = new UploadServiceFileio(fileData, fileName);
+            yield return HighLogic.fetch.StartCoroutine(tertiaryService.Send());
         }
 
-        private static void CopyLastLinkToClipboard()
+        public static void CopyLastLinkToClipboard()
         {
             if (!string.IsNullOrEmpty(lastReportUploadURI))
             {
@@ -187,18 +150,31 @@ namespace KSPBugReport
             }
         }
 
+        private static void AddScreenshotToLastReport()
+        {
+            if (!string.IsNullOrEmpty(lastReportPath) && File.Exists(lastReportPath))
+            {
+                HighLogic.fetch.StartCoroutine(TakeScreenshot());
+            }
+            else
+            {
+                ScreenMessages.PostScreenMessage($"No bug report to add a screenshot to, please create one first.", 3f, ScreenMessageStyle.UPPER_CENTER, Color.red);
+            }
+        }
+
         #endregion
 
         #region BUG REPORT CREATION
 
         private static bool CreateReport(out string zipFileName, out string zipFileFolderPath, out string zipFilePath)
         {
-            string logFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KSP.log");
-            string mmCacheFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "GameData", "ModuleManager.ConfigCache");
+            string rootPath = AppDomain.CurrentDomain.BaseDirectory;
+            string logFilePath = Path.Combine(rootPath, "KSP.log");
+            string mmCacheFilePath = Path.Combine(rootPath, "GameData", "ModuleManager.ConfigCache");
             zipFileFolderPath = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
             if (string.IsNullOrEmpty(zipFileFolderPath))
             {
-                zipFileFolderPath = AppDomain.CurrentDomain.BaseDirectory;
+                zipFileFolderPath = rootPath;
             }
 
             zipFileFolderPath = Path.Combine(zipFileFolderPath, "KSPBugReports");
@@ -242,6 +218,38 @@ namespace KSPBugReport
                     Lib.Log($"Could not zip KSP.log\n{e}", Lib.LogLevel.Warning);
                     archive.Dispose();
                     return false;
+                }
+
+                string kspLogsPath = Path.Combine(rootPath, "Logs");
+                string kopernicusLogsPath = Path.Combine(kspLogsPath, "Kopernicus");
+                if (Directory.Exists(kopernicusLogsPath))
+                {
+                    try
+                    {
+                        string[] kopernicusLogs = Directory.GetFiles(kopernicusLogsPath, "*.log", SearchOption.AllDirectories);
+
+                        DateTime startTime = System.Diagnostics.Process.GetCurrentProcess().StartTime;
+                        foreach (string kopernicusLog in kopernicusLogs)
+                        {
+                            using (Stream fileStream = File.Open(kopernicusLog, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                            {
+                                string entryPath = kopernicusLog.Replace(kspLogsPath, string.Empty).TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+                                if (File.GetLastWriteTime(kopernicusLog) < startTime)
+                                {
+                                    entryPath += ".oldsession";
+                                }
+                                ZipArchiveEntry zipArchiveEntry = archive.CreateEntry(entryPath, System.IO.Compression.CompressionLevel.Optimal);
+                                using (Stream entryStream = zipArchiveEntry.Open())
+                                {
+                                    fileStream.CopyTo(entryStream);
+                                }
+                            }
+                        }
+                    }
+                    catch (Exception e)
+                    {
+                        Lib.Log($"Error writing Kopernicus logs\n{e}", Lib.LogLevel.Warning);
+                    }
                 }
 
                 try
@@ -310,6 +318,53 @@ namespace KSPBugReport
                 }
             }
             return true;
+        }
+
+        private static IEnumerator TakeScreenshot()
+        {
+            DebugScreen instance = FindObjectOfType<DebugScreen>();
+            if (instance != null)
+            {
+                yield return null; // prevent error in DebugScreen
+                instance.Hide();
+                yield return null; // make sure the debug screen is hidden when we take the screenshot
+            }
+
+            try
+            {
+                byte[] shotPNG = ScreenCapture.CaptureScreenshotAsTexture(1).EncodeToPNG();
+                string pngFileName = null;
+
+                using (ZipArchive archive = ZipFile.Open(lastReportPath, ZipArchiveMode.Update))
+                {
+                    using (Stream memoryStream = new MemoryStream(shotPNG))
+                    {
+                        pngFileName = "Screenshot_" + DateTime.Now.ToString(@"yyyy-MM-dd_HHmmss") + ".png";
+                        ZipArchiveEntry zipArchiveEntry =
+                            archive.CreateEntry(pngFileName, System.IO.Compression.CompressionLevel.Optimal);
+                        using (Stream entryStream = zipArchiveEntry.Open())
+                        {
+                            memoryStream.CopyTo(entryStream);
+                        }
+                    }
+                }
+
+                ScreenMessages.PostScreenMessage(
+                    $"Screenshot :\n<color=#FF8000>{pngFileName}</color>\n added to report :\n<color=#FF8000>{Path.GetFileName(lastReportPath)}</color>",
+                    5f, ScreenMessageStyle.UPPER_CENTER, true);
+                Lib.Log($"Screenshot {pngFileName} added to report {Path.GetFileName(lastReportPath)}");
+            }
+            catch (Exception e)
+            {
+                ScreenMessages.PostScreenMessage($"Error creating a screenshot", 5f, ScreenMessageStyle.UPPER_CENTER, Color.red);
+                Lib.Log($"Error creating screenshot\n{e}", Lib.LogLevel.Warning);
+            }
+
+            if (instance != null)
+            {
+                yield return null;
+                instance.Show();
+            }
         }
 
         public static void ForceFlushKspLogToDisk()
