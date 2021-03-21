@@ -2,8 +2,27 @@
 
 ### Bug reporting plugin for KSP players
 
+This small plugin adds a "bug report" menu to the KSP debug menu (opened with ALT+F12). That menu provide a way for players to create a zipped bug report cointaining the KSP logs and game database dumps usually needed by mod authors when they need to troubleshot bugs and issues. It also include an option to automatically upload the bug report to an online file sharing service.
+
+### How to use
+
+- Try to reproduce your issue or bug, in order for KSP to log information about what happens.
+- Press ALT+F12
+- In the `Bug Report` menu, click on `Create report`. This will create a zip archive on your desktop. You can open the location of that zip file in your file explorer by clicking on `Open report folder`.
+- If you want to add screenshots to your report, open/position what you want to show and click on `Add screenshot to last report`. The debug menu window won't appear on the screenshot. You can add multiple screenshots.
+- To upload the report to a file sharing service, click on `Upload last report`. Once uploaded, the download link to your report will be copied to the clipboard and you can paste it elsewhere (forum post, github, discord...). In case you loose the copied link, you can copy it to the clipboard again by clicking on `Copy last upload link to clipboarb`.
+
+### Disclaimer
+
+This plugin will upload information about your computer specs, your KSP install and your current game on the internet, on public file sharing services. 
+
+The KSP logs usually don't contain any sensitive information, however, be aware that :
+- The KSP.log file contain the path to your KSP install, which **can contain the user name of your computer** (for example `C:\Users\MyUserName\...`).
+- The KSP.log file contain everything that is logged by you mods/plugins.
+- Your savegame is included in the report, including everything that you can write in KSP (vessel names and descriptions for example)
+
 ### Features :
-Add options to the KSP debug window (ALT+F12) to :
+Add options to the KSP debug window to :
 - Create a zipped bug report on the desktop, containing :
   - The `KSP.log` file
   - The `modulemanager.configcache` file, or if not found a `Configs.txt` file generated from the live game database
