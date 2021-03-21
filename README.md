@@ -2,7 +2,11 @@
 
 ### Bug reporting plugin for KSP players
 
-This small plugin adds a "bug report" menu to the KSP debug menu (opened with ALT+F12). That menu provide a way for players to create a zipped bug report cointaining the KSP logs and game database dumps usually needed by mod authors when they need to troubleshot bugs and issues. It also include an option to automatically upload the bug report to an online file sharing service.
+This small plugin adds a "bug report" menu to the KSP debug menu (opened with ALT+F12). 
+
+That menu provide a way for players to create a zipped bug report containing the KSP logs and game database dumps usually needed by mod authors when they need to troubleshot bugs and issues. 
+
+It also include an option to automatically upload the bug report to an online file sharing service.
 
 ![screenshot](https://github.com/HarmonyKSP/KSPBugReport/raw/master/Screenshot.png)
 
