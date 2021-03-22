@@ -316,6 +316,34 @@ namespace KSPBugReport
                 {
                     Lib.Log($"Could not zip savegame\n{e}", Lib.LogLevel.Warning);
                 }
+                
+                try
+                {
+                    var ckanHistoryDir = new DirectoryInfo(Path.Combine(rootPath, "CKAN", "history"));
+                    if (ckanHistoryDir.Exists)
+                    {
+                        FileInfo newestCkan = null;
+                        foreach (FileInfo fi in ckanHistoryDir.EnumerateFiles("*.ckan"))
+                        {
+                            if (newestCkan == null || newestCkan.LastWriteTimeUtc < fi.LastWriteTimeUtc)
+                            {
+                                newestCkan = fi;
+                            }
+                        }
+                        if (newestCkan != null)
+                        {
+                            using (Stream fileStream = newestCkan.OpenRead())
+                            using (Stream entryStream = archive.CreateEntry(newestCkan.Name, System.IO.Compression.CompressionLevel.Optimal).Open())
+                            {
+                                fileStream.CopyTo(entryStream);
+                            }
+                        }
+                    }
+                }
+                catch (Exception e)
+                {
+                    Lib.Log($"Could not zip CKAN history file\n{e}", Lib.LogLevel.Warning);
+                }
             }
             return true;
         }
